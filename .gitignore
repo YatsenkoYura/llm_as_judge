@@ -1,0 +1,5 @@
+venv
+.env
+__pycache__
+best_prompt.txt
+*.pyc

@@ -3,7 +3,7 @@ from openai import OpenAI
 from models import GraphState, JudgeResponse
 
 
-def build_workflow(client: OpenAI, model_name: str):
+def build_workflow(client: OpenAI, evaluator_model: str, judge_model: str):
     def generate_prompt_node(state: GraphState) -> dict:
         print(f"\n[Итерация {state['iteration']}] Генерация инструкции...")
 
@@ -23,7 +23,7 @@ def build_workflow(client: OpenAI, model_name: str):
         Задача, которую решает оцениваемый агент: {state['task_description']}
 
         ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА ДЛЯ ТВОЕЙ ИНСТРУКЦИИ:
-        1. Универсальная защита от лжи агента: ИИ-агенты часто галлюцинируют и уверенно заявляют пользователю, что "задача выполнена", даже если произошла системная ошибка или действие не было совершено. Запрети судье верить агенту на слово. Судья должен проверять успех ТОЛЬКО по фактическим системным вызовам (вызовам функций, логам инструментов).
+        1. Четко следуй 'Описанию задачи', переданному выше. Инструкция должна быть сфокусирована именно на этой задаче.
         2. Краткость: Запрети судье лить воду. Рассуждения должны быть тезисными (буллиты).
         3. Few-Shot примеры: ОБЯЗАТЕЛЬНО включи прямо внутрь своей инструкции 2 коротких выдуманных примера оценки (один на 0, другой на 1), чтобы показать судье шаблон рассуждений.
 
@@ -49,17 +49,15 @@ def build_workflow(client: OpenAI, model_name: str):
             system_message += "\nВыведи только текст инструкции (без лишних приветствий)."
 
         response = client.chat.completions.create(
-            model=model_name,
+            model=evaluator_model,
             messages=[{"role": "user", "content": system_message}],
             temperature=0.4
         )
 
         generated_prompt = response.choices[0].message.content.strip()
 
-        print("\n" + "=" * 40)
         print("СГЕНЕРИРОВАННЫЙ ПРОМПТ:")
         print(generated_prompt if generated_prompt else "[ВНИМАНИЕ: ИИ ВЕРНУЛ ПУСТУЮ СТРОКУ!]")
-        print("=" * 40 + "\n")
 
         return {"current_prompt": generated_prompt}
 
@@ -73,7 +71,7 @@ def build_workflow(client: OpenAI, model_name: str):
         for example in state['val_examples']:
             try:
                 response = client.beta.chat.completions.parse(
-                    model=model_name,
+                    model=judge_model,
                     messages=[
                         {"role": "system", "content": state['current_prompt']},
                         {"role": "user", "content": f"Оцени этот лог/диалог:\n{example.context}"}

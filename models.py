@@ -7,9 +7,9 @@ class UniversalExample(BaseModel):
     explanation: str
 
 class JudgeResponse(BaseModel):
-    user_request: str
-    system_actions: str
-    agent_words: str
+    user_intent: str
+    ai_response_check: str
+    refusal_check: str
     verification: str
     label: Literal["0", "1"]
 

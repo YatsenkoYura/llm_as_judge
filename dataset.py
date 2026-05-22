@@ -1,35 +1,69 @@
-import json
+import pandas as pd
 from models import UniversalExample
+from typing import List, Tuple
 
+def process_dataset(
+    df: pd.DataFrame,
+    context_col: str,
+    label_cols: List[str],
+    explanation_col: str,
+    num_train: int,
+    num_val: int,
+    val_for_1: List[str] = None,
+    val_for_0: List[str] = None,
+    case_sensitive: bool = False
+) -> Tuple[List[UniversalExample], List[UniversalExample]]:
+    if val_for_1 is None:
+        val_for_1 = ['yes', '1', 'true', '1.0']
+    if val_for_0 is None:
+        val_for_0 = ['no', '0', 'false', '0.0']
 
-def load_tau_dataset(num_train, num_val):
-    file_path = "/home/kano/.cache/huggingface/hub/datasets--cmu-lti--tau-usi/snapshots/400222f04769da7b6c22d230d3cea98084b1b659/data/tau_bench_tasks_unified.json"
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        raw_data = json.load(f)
-
-    if isinstance(raw_data, dict):
-        all_items = []
-        for task_name, task_data in raw_data.items():
-            if isinstance(task_data, list):
-                all_items.extend(task_data)
-            else:
-                all_items.append(task_data)
+    if not case_sensitive:
+        val_for_1 = [str(v).strip().lower() for v in val_for_1]
+        val_for_0 = [str(v).strip().lower() for v in val_for_0]
     else:
-        all_items = raw_data
+        val_for_1 = [str(v).strip() for v in val_for_1]
+        val_for_0 = [str(v).strip() for v in val_for_0]
 
     formatted_examples = []
-    for item in all_items:
-        context_str = json.dumps(item, ensure_ascii=False, indent=2)
 
-        label_val = str(item.get("reward", item.get("success", "1")))
+    for _, row in df.iterrows():
+        # Извлекаем данные по указанным колонкам
+        context_str = str(row[context_col]) if pd.notna(row[context_col]) else ""
+        explanation_str = str(row[explanation_col]) if pd.notna(row[explanation_col]) else ""
+        
+        # Нормализация метки
+        label_val = "0"
+        has_one = False
+        all_zero = True
+        
+        for col in label_cols:
+            val = str(row[col]) if pd.notna(row[col]) else ""
+            val = val.strip()
+            if not case_sensitive:
+                val = val.lower()
+                
+            if val in val_for_1:
+                has_one = True
+                break
+            elif val not in val_for_0:
+                all_zero = False
+                
+        if has_one:
+            label_val = "1"
+        elif all_zero:
+            label_val = "0"
+        else:
+            label_val = "unknown"
 
-        example = UniversalExample(
-            context=context_str,
-            expected_label=label_val,
-            explanation="Оценка извлечена из датасета TAU"
-        )
-        formatted_examples.append(example)
+        # Игнорируем строки, которые не попали ни в 0, ни в 1
+        if label_val in ["0", "1"]:
+            example = UniversalExample(
+                context=context_str,
+                expected_label=label_val,
+                explanation=explanation_str
+            )
+            formatted_examples.append(example)
 
     train_data = formatted_examples[:num_train]
     val_data = formatted_examples[num_train: num_train + num_val]
