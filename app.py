@@ -284,6 +284,110 @@ with tab_run:
 
             st.success("Готово. Перейдите на вкладку «Результаты».")
 
+        st.divider()
+
+        # бейзлайн
+        if st.button("Тест на бейзлайне (zero-shot)"):
+            if mapping["drop_duplicates"]:
+                df_run = df_run.drop_duplicates(subset=[mapping["context_col"]])
+
+            _, val_data = process_dataset(
+                df=df_run, context_col=mapping["context_col"],
+                label_cols=mapping["label_cols"], explanation_col=mapping["explanation_col"],
+                num_train=num_train, num_val=num_val,
+                val_for_1=mapping["val_for_1"], val_for_0=mapping["val_for_0"],
+                case_sensitive=mapping["case_sensitive"],
+                shuffle=use_shuffle, shuffle_seed=shuffle_seed
+            )
+            if not val_data:
+                st.error("Валидационная выборка пуста.")
+                st.stop()
+
+            naive_prompt = (
+                "Ты ИИ-судья. Оцени ответ агента в диалоге.\n"
+                "Если агент справился с задачей — label 1, если нет — label 0.\n"
+                "Ответь в JSON: {\"analysis\": \"...\", \"evidence\": \"...\", \"label\": \"0\" или \"1\"}"
+            )
+
+            from graph import _make_judge_caller
+            client = OpenAI(api_key=api_token, base_url=api_base_url if api_base_url else None)
+            call_judge = _make_judge_caller(client, judge_model, max_retries)
+
+            tp = fp = tn = fn = api_errors = 0
+            baseline_status = st.status("Бейзлайн: оценка...", expanded=True)
+            baseline_progress = st.progress(0)
+
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            def eval_one(idx, ex):
+                try:
+                    r = call_judge(naive_prompt, ex.context)
+                    return idx, ex, r, None
+                except Exception as e:
+                    return idx, ex, None, str(e)
+
+            workers = min(max_parallel, len(val_data))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {executor.submit(eval_one, i, ex): i for i, ex in enumerate(val_data)}
+                done = 0
+                for future in as_completed(futures):
+                    idx, example, result, error = future.result()
+                    done += 1
+                    baseline_progress.progress(done / len(val_data), text=f"{done}/{len(val_data)}")
+                    if error:
+                        api_errors += 1
+                        continue
+                    expected = float(example.expected_label)
+                    predicted = float(result.label)
+                    if expected == 1 and predicted == 1: tp += 1
+                    elif expected == 0 and predicted == 1: fp += 1
+                    elif expected == 0 and predicted == 0: tn += 1
+                    elif expected == 1 and predicted == 0: fn += 1
+
+            evaluated = len(val_data) - api_errors
+            if evaluated == 0:
+                st.error("Все запросы бейзлайна завершились ошибкой.")
+            else:
+                acc = ((tp + tn) / evaluated) * 100
+                r1 = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                r0 = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+                bacc = ((r0 + r1) / 2) * 100
+                prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                rec = r1
+                f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
+
+                baseline_status.update(label=f"Бейзлайн: acc={acc:.1f}% bacc={bacc:.1f}%", state="complete")
+
+                st.subheader("Результаты бейзлайна (zero-shot)")
+                bc1, bc2, bc3, bc4 = st.columns(4)
+                with bc1: st.metric("Accuracy", f"{acc:.1f}%")
+                with bc2: st.metric("Balanced Acc", f"{bacc:.1f}%")
+                with bc3: st.metric("F1", f"{f1:.3f}")
+                with bc4: st.metric("API Err", api_errors)
+
+                cm_df = pd.DataFrame(
+                    [[tn, fp], [fn, tp]],
+                    index=['Факт: 0', 'Факт: 1'],
+                    columns=['Предсказано: 0', 'Предсказано: 1']
+                )
+                st.dataframe(cm_df, width="stretch")
+
+                # сравнение если есть результат пайплайна
+                if st.session_state.last_result:
+                    pipe_acc = st.session_state.last_result["final_state"]["best_accuracy"]
+                    delta = pipe_acc - (bacc if use_balanced_accuracy else acc)
+                    st.metric(
+                        "Прирост пайплайна vs бейзлайн",
+                        f"{pipe_acc:.1f}%",
+                        delta=f"+{delta:.1f}%" if delta > 0 else f"{delta:.1f}%"
+                    )
+
+                st.session_state["baseline_result"] = {
+                    "accuracy": round(acc, 1), "balanced_accuracy": round(bacc, 1),
+                    "f1": round(f1, 3), "precision": round(prec, 3), "recall": round(rec, 3),
+                    "tp": tp, "fp": fp, "tn": tn, "fn": fn, "api_errors": api_errors
+                }
+
 # результаты
 with tab_results:
     st.subheader("Результаты")
