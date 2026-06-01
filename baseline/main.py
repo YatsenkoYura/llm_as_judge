@@ -68,7 +68,7 @@ def run_baseline():
                 correct += 1
             else:
                 errors.append(
-                    f"Ожидали: {example.expected_label}, Судья: {result.label} | Логика: {result.verification}")
+                    f"Ожидали: {example.expected_label}, Судья: {result.label} | Логика: {result.analysis}")
 
             print(f"Ожидали: {example.expected_label} | ИИ: {result.label} | Вердикт: {'✅' if is_correct else '❌'}")
 

@@ -1,6 +1,8 @@
 import pandas as pd
+import random
 from models import UniversalExample
 from typing import List, Tuple
+
 
 def process_dataset(
     df: pd.DataFrame,
@@ -11,7 +13,9 @@ def process_dataset(
     num_val: int,
     val_for_1: List[str] = None,
     val_for_0: List[str] = None,
-    case_sensitive: bool = False
+    case_sensitive: bool = False,
+    shuffle: bool = True,
+    shuffle_seed: int = 42
 ) -> Tuple[List[UniversalExample], List[UniversalExample]]:
     if val_for_1 is None:
         val_for_1 = ['yes', '1', 'true', '1.0']
@@ -28,11 +32,9 @@ def process_dataset(
     formatted_examples = []
 
     for _, row in df.iterrows():
-        # Извлекаем данные по указанным колонкам
         context_str = str(row[context_col]) if pd.notna(row[context_col]) else ""
         explanation_str = str(row[explanation_col]) if pd.notna(row[explanation_col]) else ""
         
-        # Нормализация метки
         label_val = "0"
         has_one = False
         all_zero = True
@@ -56,7 +58,6 @@ def process_dataset(
         else:
             label_val = "unknown"
 
-        # Игнорируем строки, которые не попали ни в 0, ни в 1
         if label_val in ["0", "1"]:
             example = UniversalExample(
                 context=context_str,
@@ -64,6 +65,10 @@ def process_dataset(
                 explanation=explanation_str
             )
             formatted_examples.append(example)
+
+    if shuffle:
+        random.seed(shuffle_seed)
+        random.shuffle(formatted_examples)
 
     train_data = formatted_examples[:num_train]
     val_data = formatted_examples[num_train: num_train + num_val]
