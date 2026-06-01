@@ -109,7 +109,7 @@ with tab_data:
             with c3: st.metric("Файл", uploaded_file.name)
 
             with st.expander("Превью", expanded=True):
-                st.dataframe(df.head(5), use_container_width=True)
+                st.dataframe(df.head(5), width="stretch")
 
             st.divider()
             st.subheader("Маппинг столбцов")
@@ -176,7 +176,7 @@ with tab_run:
             with pc2:
                 st.markdown(f"- **Целевая точность:** {target_acc}%\n- **Параллельность:** {max_parallel}\n- **Retry:** {max_retries}\n- **Balanced Accuracy:** {'да' if use_balanced_accuracy else 'нет'}")
 
-        if st.button("Запустить оптимизацию", type="primary", use_container_width=True):
+        if st.button("Запустить оптимизацию", type="primary"):
             if mapping["drop_duplicates"]:
                 df_run = df_run.drop_duplicates(subset=[mapping["context_col"]])
             if not mapping["label_cols"]:
@@ -307,12 +307,12 @@ with tab_results:
             st.divider()
             st.subheader("Метрики по итерациям")
             metrics_df = pd.DataFrame(metrics_history)
-            display_cols = ['iteration', 'accuracy', 'balanced_accuracy', 'precision',
+            numeric_cols = ['iteration', 'accuracy', 'balanced_accuracy', 'precision',
                             'recall', 'f1', 'tp', 'fp', 'tn', 'fn', 'api_errors']
-            display_df = metrics_df[[c for c in display_cols if c in metrics_df.columns]].copy()
+            display_df = metrics_df[[c for c in numeric_cols if c in metrics_df.columns]].copy()
             display_df.columns = ['Итерация', 'Acc %', 'BAcc %', 'Prec', 'Rec', 'F1',
                                   'TP', 'FP', 'TN', 'FN', 'Err'][:len(display_df.columns)]
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, width="stretch", hide_index=True)
 
             # график
             chart_df = metrics_df[['iteration', 'accuracy', 'balanced_accuracy', 'f1']].copy()
@@ -329,7 +329,7 @@ with tab_results:
                 index=['Факт: 0', 'Факт: 1'],
                 columns=['Предсказано: 0', 'Предсказано: 1']
             )
-            st.dataframe(cm_df, use_container_width=True)
+            st.dataframe(cm_df, width="stretch")
 
             # промпты
             st.divider()
@@ -350,16 +350,17 @@ with tab_results:
         dl1, dl2, dl3 = st.columns(3)
         with dl1:
             st.download_button("Промпт (.txt)", data=fs['best_prompt'],
-                               file_name="best_prompt.txt", mime="text/plain", use_container_width=True)
+                               file_name="best_prompt.txt", mime="text/plain")
         with dl2:
             if metrics_history:
-                st.download_button("Метрики (.csv)", data=pd.DataFrame(metrics_history).to_csv(index=False),
-                                   file_name="metrics.csv", mime="text/csv", use_container_width=True)
+                export_df = pd.DataFrame(metrics_history).drop(columns=['prompt_snapshot'], errors='ignore')
+                st.download_button("Метрики (.csv)", data=export_df.to_csv(index=False),
+                                   file_name="metrics.csv", mime="text/csv")
         with dl3:
             report = {"best_prompt": fs['best_prompt'], "best_accuracy": fs['best_accuracy'],
                       "metrics_history": metrics_history, "config": cfg, "timestamp": res["timestamp"]}
             st.download_button("Отчёт (.json)", data=json.dumps(report, ensure_ascii=False, indent=2),
-                               file_name="report.json", mime="application/json", use_container_width=True)
+                               file_name="report.json", mime="application/json")
 
         with open("best_prompt.txt", "w", encoding="utf-8") as f:
             f.write(fs['best_prompt'])
@@ -383,7 +384,8 @@ with tab_history:
 
                 hist_metrics = fs_h.get('metrics_history', [])
                 if hist_metrics:
-                    st.dataframe(pd.DataFrame(hist_metrics), use_container_width=True, hide_index=True)
+                    hist_df = pd.DataFrame(hist_metrics).drop(columns=['prompt_snapshot'], errors='ignore')
+                    st.dataframe(hist_df, width="stretch", hide_index=True)
 
                 run_logs = run.get("logs", [])
                 if run_logs:
