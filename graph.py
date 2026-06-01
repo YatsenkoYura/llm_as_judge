@@ -180,7 +180,7 @@ def build_workflow(
 
                 if error:
                     api_errors += 1
-                    logger.warning(f"❌ ОШИБКА (после {max_retries} попыток): {error}")
+                    logger.warning(f"FAIL (after {max_retries} retries): {error}")
                     _emit({
                         "type": "eval_progress", "iteration": iteration,
                         "current": completed, "total": total,
@@ -201,7 +201,7 @@ def build_workflow(
                 elif expected == 1 and predicted == 0:
                     fn += 1
 
-                logger.info(f"Ожидали: {example.expected_label} | ИИ: {result.label} | {'✅' if is_correct else '❌'}")
+                logger.info(f"expected={example.expected_label} predicted={result.label} {'OK' if is_correct else 'MISS'}")
 
                 if not is_correct:
                     errors.append(
@@ -223,7 +223,7 @@ def build_workflow(
         # --- Metrics ---
         evaluated = total - api_errors
         if evaluated == 0:
-            logger.warning("⚠️ Все запросы завершились ошибкой!")
+            logger.warning("All requests failed — no valid evaluations.")
             _emit({"type": "eval_done", "iteration": iteration, "error": "all_failed"})
             return {"iteration": state["iteration"] + 1, "feedback": "Все запросы завершились ошибкой API."}
 
