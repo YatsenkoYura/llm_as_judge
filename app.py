@@ -15,27 +15,22 @@ logging.basicConfig(level=logging.INFO)
 
 st.set_page_config(page_title="LLM Judge Optimizer", layout="wide")
 
-# ── Minimal CSS ──
+# css
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
 div[data-testid="stMetric"] {
     background: rgba(30, 30, 50, 0.6);
     border: 1px solid rgba(100, 100, 140, 0.25);
     border-radius: 10px;
     padding: 14px 18px;
 }
-
-.stTabs [data-baseweb="tab"] {
-    font-weight: 500;
-    padding: 8px 20px;
-}
+.stTabs [data-baseweb="tab"] { font-weight: 500; padding: 8px 20px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session State ──
+# состояния
 if "run_history" not in st.session_state:
     st.session_state.run_history = []
 if "last_result" not in st.session_state:
@@ -43,28 +38,24 @@ if "last_result" not in st.session_state:
 if "pipeline_logs" not in st.session_state:
     st.session_state.pipeline_logs = []
 
-# ── Header ──
 st.title("LLM Judge Optimizer")
 st.caption("Итеративный поиск лучшего системного промпта для LLM-судьи")
 
-# ── Tabs ──
 tab_config, tab_data, tab_run, tab_results, tab_history = st.tabs([
     "Конфигурация", "Данные", "Запуск", "Результаты", "История"
 ])
 
-# ────────────────────────────────────────────
-# TAB 1: Configuration
-# ────────────────────────────────────────────
+# конфигурация
 with tab_config:
     st.subheader("API")
     c1, c2 = st.columns(2)
     with c1:
         api_token = st.text_input("API Token", value=os.getenv("API_TOKEN", ""), type="password",
-                                  help="Берётся из .env (API_TOKEN) или введите вручную")
+                                  help="Из .env или вручную")
         evaluator_model = st.text_input("Evaluator Model", value=os.getenv("EVALUATOR_MODEL", "gemini-3-flash-preview"))
     with c2:
         api_base_url = st.text_input("API Base URL", value=os.getenv("API_BASE_URL", "https://api.openai.com/v1"),
-                                     help="Берётся из .env (API_BASE_URL)")
+                                     help="Из .env")
         judge_model = st.text_input("Judge Model", value=os.getenv("JUDGE_MODEL", "gemini-3-flash-preview"))
 
     st.divider()
@@ -87,16 +78,10 @@ with tab_config:
     adv1, adv2, adv3 = st.columns(3)
     with adv1:
         use_shuffle = st.toggle("Перемешивать данные", value=True)
-        if use_shuffle:
-            shuffle_seed = st.number_input("Seed", min_value=0, value=42)
-        else:
-            shuffle_seed = 42
+        shuffle_seed = st.number_input("Seed", min_value=0, value=42) if use_shuffle else 42
     with adv2:
         use_smart_truncation = st.toggle("Умная обрезка", value=True)
-        if use_smart_truncation:
-            truncation_max_len = st.number_input("Макс. длина контекста (симв.)", min_value=200, value=1000, step=100)
-        else:
-            truncation_max_len = 1000
+        truncation_max_len = st.number_input("Макс. длина (симв.)", min_value=200, value=1000, step=100) if use_smart_truncation else 1000
     with adv3:
         use_balanced_accuracy = st.toggle("Balanced Accuracy", value=True)
         max_parallel = st.number_input("Параллельных запросов", min_value=1, max_value=20, value=5)
@@ -105,34 +90,25 @@ with tab_config:
     if api_token and api_token != "your_token_here":
         st.success("API Token настроен")
     else:
-        st.warning("Введите API Token (или задайте API_TOKEN в .env)")
+        st.warning("Введите API Token или задайте в .env")
 
-# ────────────────────────────────────────────
-# TAB 2: Data
-# ────────────────────────────────────────────
+# данные
 with tab_data:
     st.subheader("Загрузка датасета")
-    uploaded_file = st.file_uploader("CSV или JSON файл", type=["csv", "json"], label_visibility="collapsed")
+    uploaded_file = st.file_uploader("CSV или JSON", type=["csv", "json"], label_visibility="collapsed")
 
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_json(uploaded_file)
-
+            df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_json(uploaded_file)
             st.session_state["uploaded_df"] = df
             st.session_state["uploaded_filename"] = uploaded_file.name
 
-            col_info1, col_info2, col_info3 = st.columns(3)
-            with col_info1:
-                st.metric("Строк", len(df))
-            with col_info2:
-                st.metric("Столбцов", len(df.columns))
-            with col_info3:
-                st.metric("Файл", uploaded_file.name)
+            c1, c2, c3 = st.columns(3)
+            with c1: st.metric("Строк", len(df))
+            with c2: st.metric("Столбцов", len(df.columns))
+            with c3: st.metric("Файл", uploaded_file.name)
 
-            with st.expander("Превью данных", expanded=True):
+            with st.expander("Превью", expanded=True):
                 st.dataframe(df.head(5), use_container_width=True)
 
             st.divider()
@@ -142,8 +118,7 @@ with tab_data:
             mc1, mc2, mc3 = st.columns(3)
             with mc1:
                 context_col = st.selectbox("Столбец контекста", options=columns)
-                drop_duplicates = st.checkbox("Удалить дубликаты", value=True,
-                                              help="Убирает дубли по контексту (DICES и т.п.)")
+                drop_duplicates = st.checkbox("Удалить дубликаты", value=True, help="По контексту")
             with mc2:
                 st.markdown("**Столбцы меток**")
                 label_mode = st.radio("Режим:", ["Один столбец", "Несколько (any -> 1)"], label_visibility="collapsed")
@@ -155,7 +130,7 @@ with tab_data:
                 explanation_col = st.selectbox("Столбец объяснения", options=columns)
 
             st.divider()
-            st.subheader("Маппинг значений меток")
+            st.subheader("Маппинг значений")
             mv1, mv2, mv3 = st.columns(3)
             with mv1:
                 val_for_1_str = st.text_input("Значения для метки 1", value="Yes, 1, True")
@@ -174,13 +149,11 @@ with tab_data:
             st.success("Данные загружены. Перейдите на вкладку «Запуск».")
 
         except Exception as e:
-            st.error(f"Ошибка при обработке файла: {str(e)}")
+            st.error(f"Ошибка: {e}")
     else:
-        st.info("Загрузите CSV или JSON файл для начала работы.")
+        st.info("Загрузите CSV или JSON для начала.")
 
-# ────────────────────────────────────────────
-# TAB 3: Run Pipeline
-# ────────────────────────────────────────────
+# запуск
 with tab_run:
     st.subheader("Запуск пайплайна")
 
@@ -188,9 +161,9 @@ with tab_run:
     has_token = api_token and api_token != "your_token_here"
 
     if not has_data:
-        st.warning("Сначала загрузите данные на вкладке «Данные».")
+        st.warning("Сначала загрузите данные.")
     if not has_token:
-        st.warning("Настройте API Token на вкладке «Конфигурация».")
+        st.warning("Настройте API Token.")
 
     if has_data and has_token:
         mapping = st.session_state["col_mapping"]
@@ -199,48 +172,38 @@ with tab_run:
         with st.expander("Параметры запуска", expanded=False):
             pc1, pc2 = st.columns(2)
             with pc1:
-                st.markdown(f"- **Evaluator:** `{evaluator_model}`")
-                st.markdown(f"- **Judge:** `{judge_model}`")
-                st.markdown(f"- **Train / Val:** {num_train} / {num_val}")
-                st.markdown(f"- **Итерации:** {max_iter}")
+                st.markdown(f"- **Evaluator:** `{evaluator_model}`\n- **Judge:** `{judge_model}`\n- **Train/Val:** {num_train}/{num_val}\n- **Итерации:** {max_iter}")
             with pc2:
-                st.markdown(f"- **Целевая точность:** {target_acc}%")
-                st.markdown(f"- **Параллельность:** {max_parallel}")
-                st.markdown(f"- **Retry:** {max_retries}")
-                st.markdown(f"- **Balanced Accuracy:** {'да' if use_balanced_accuracy else 'нет'}")
+                st.markdown(f"- **Целевая точность:** {target_acc}%\n- **Параллельность:** {max_parallel}\n- **Retry:** {max_retries}\n- **Balanced Accuracy:** {'да' if use_balanced_accuracy else 'нет'}")
 
         if st.button("Запустить оптимизацию", type="primary", use_container_width=True):
             if mapping["drop_duplicates"]:
                 df_run = df_run.drop_duplicates(subset=[mapping["context_col"]])
-
             if not mapping["label_cols"]:
                 st.error("Выберите хотя бы один столбец оценки.")
                 st.stop()
 
             train_data, val_data = process_dataset(
-                df=df_run,
-                context_col=mapping["context_col"],
-                label_cols=mapping["label_cols"],
-                explanation_col=mapping["explanation_col"],
+                df=df_run, context_col=mapping["context_col"],
+                label_cols=mapping["label_cols"], explanation_col=mapping["explanation_col"],
                 num_train=num_train, num_val=num_val,
                 val_for_1=mapping["val_for_1"], val_for_0=mapping["val_for_0"],
                 case_sensitive=mapping["case_sensitive"],
                 shuffle=use_shuffle, shuffle_seed=shuffle_seed
             )
 
-            if len(train_data) == 0 or len(val_data) == 0:
-                st.error("Обучающая или валидационная выборка пуста.")
+            if not train_data or not val_data:
+                st.error("Выборка пуста.")
                 st.stop()
 
+            # статистика разбиения
             train_ones = sum(1 for ex in train_data if ex.expected_label == '1')
             val_ones = sum(1 for ex in val_data if ex.expected_label == '1')
             sc1, sc2 = st.columns(2)
-            with sc1:
-                st.info(f"Train: {len(train_data)} примеров (0: {len(train_data)-train_ones}, 1: {train_ones})")
-            with sc2:
-                st.info(f"Val: {len(val_data)} примеров (0: {len(val_data)-val_ones}, 1: {val_ones})")
+            with sc1: st.info(f"Train: {len(train_data)} (0:{len(train_data)-train_ones} 1:{train_ones})")
+            with sc2: st.info(f"Val: {len(val_data)} (0:{len(val_data)-val_ones} 1:{val_ones})")
 
-            # ── Progress UI ──
+            # прогресс
             status_container = st.status("Пайплайн запущен...", expanded=True)
             progress_bar = st.progress(0, text="Инициализация...")
             log_area = st.empty()
@@ -249,45 +212,38 @@ with tab_run:
             def on_progress(event):
                 etype = event.get("type", "")
                 if etype == "generate_start":
-                    it = event["iteration"]
-                    msg = f"[iter {it}] Генерация промпта..."
+                    msg = f"[iter {event['iteration']}] генерация промпта..."
                     status_container.update(label=msg)
                     logs.append(msg)
                 elif etype == "generate_done":
                     it = event["iteration"]
-                    msg = f"[iter {it}] Промпт сгенерирован"
+                    msg = f"[iter {it}] промпт готов"
                     logs.append(msg)
-                    pct = ((it - 1) * 2 + 1) / (max_iter * 2)
-                    progress_bar.progress(min(pct, 1.0), text=msg)
+                    progress_bar.progress(min(((it - 1) * 2 + 1) / (max_iter * 2), 1.0), text=msg)
                 elif etype == "eval_start":
-                    msg = f"[iter {event['iteration']}] Оценка {event['total']} примеров..."
+                    msg = f"[iter {event['iteration']}] оценка {event['total']} примеров..."
                     status_container.update(label=msg)
                     logs.append(msg)
                 elif etype == "eval_progress":
-                    cur, tot = event["current"], event["total"]
-                    it = event["iteration"]
+                    cur, tot, it = event["current"], event["total"], event["iteration"]
                     if event.get("status") == "ok":
-                        mark = "OK" if event.get("correct") else "MISS"
-                        detail = f"  [{cur}/{tot}] {mark}: expected={event['expected']} got={event['predicted']}"
+                        mark = "ok" if event.get("correct") else "miss"
+                        logs.append(f"  [{cur}/{tot}] {mark}: exp={event['expected']} got={event['predicted']}")
                     else:
-                        detail = f"  [{cur}/{tot}] API error"
-                    logs.append(detail)
+                        logs.append(f"  [{cur}/{tot}] api error")
                     base = ((it - 1) * 2 + 1) / (max_iter * 2)
                     step = (1 / (max_iter * 2)) * (cur / tot)
-                    progress_bar.progress(min(base + step, 1.0), text=f"Пример {cur}/{tot}")
+                    progress_bar.progress(min(base + step, 1.0), text=f"{cur}/{tot}")
                 elif etype == "eval_done":
                     m = event.get("metrics", {})
                     if m:
-                        msg = (f"[iter {m['iteration']}] "
-                               f"Acc={m['accuracy']}% BAcc={m['balanced_accuracy']}% F1={m['f1']}")
-                        logs.append(msg)
+                        logs.append(f"[iter {m['iteration']}] acc={m['accuracy']}% bacc={m['balanced_accuracy']}% f1={m['f1']}")
                 elif etype == "pipeline_done":
-                    logs.append(f"--- Завершено: {event.get('reason')} ---")
+                    logs.append(f"--- done: {event.get('reason')} ---")
                 log_area.code("\n".join(logs[-25:]), language="log")
 
-            # ── Build & Run ──
+            # запуск графа
             client = OpenAI(api_key=api_token, base_url=api_base_url if api_base_url else None)
-
             initial_state = GraphState(
                 task_description=task_desc,
                 train_examples=train_data, val_examples=val_data,
@@ -297,7 +253,6 @@ with tab_run:
                 best_prompt="", best_accuracy=0.0,
                 metrics_history=[]
             )
-
             graph = build_workflow(
                 client, evaluator_model, judge_model,
                 use_smart_truncation=use_smart_truncation,
@@ -307,13 +262,12 @@ with tab_run:
                 max_parallel_workers=max_parallel,
                 on_progress=on_progress
             )
-
             final_state = graph.invoke(initial_state)
 
             progress_bar.progress(1.0, text="Завершено")
             status_container.update(label="Пайплайн завершён", state="complete")
 
-            # Save to session
+            # сохранение результата
             run_record = {
                 "final_state": dict(final_state),
                 "timestamp": datetime.now().isoformat(),
@@ -328,11 +282,9 @@ with tab_run:
             st.session_state.run_history.append(run_record)
             st.session_state.pipeline_logs = logs
 
-            st.success("Пайплайн завершён. Перейдите на вкладку «Результаты».")
+            st.success("Готово. Перейдите на вкладку «Результаты».")
 
-# ────────────────────────────────────────────
-# TAB 4: Results
-# ────────────────────────────────────────────
+# результаты
 with tab_results:
     st.subheader("Результаты")
 
@@ -345,14 +297,10 @@ with tab_results:
 
         metric_label = "Balanced Accuracy" if cfg["balanced"] else "Accuracy"
         m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric(metric_label, f"{fs['best_accuracy']:.1f}%")
-        with m2:
-            st.metric("Итераций", fs.get("iteration", 1) - 1)
-        with m3:
-            st.metric("Evaluator", cfg["evaluator"])
-        with m4:
-            st.metric("Judge", cfg["judge"])
+        with m1: st.metric(metric_label, f"{fs['best_accuracy']:.1f}%")
+        with m2: st.metric("Итераций", fs.get("iteration", 1) - 1)
+        with m3: st.metric("Evaluator", cfg["evaluator"])
+        with m4: st.metric("Judge", cfg["judge"])
 
         metrics_history = fs.get('metrics_history', [])
         if metrics_history:
@@ -362,20 +310,18 @@ with tab_results:
             display_cols = ['iteration', 'accuracy', 'balanced_accuracy', 'precision',
                             'recall', 'f1', 'tp', 'fp', 'tn', 'fn', 'api_errors']
             display_df = metrics_df[[c for c in display_cols if c in metrics_df.columns]].copy()
-            col_names = ['Итерация', 'Accuracy %', 'Bal.Acc %', 'Precision',
-                         'Recall', 'F1', 'TP', 'FP', 'TN', 'FN', 'API Err']
-            display_df.columns = col_names[:len(display_df.columns)]
+            display_df.columns = ['Итерация', 'Acc %', 'BAcc %', 'Prec', 'Rec', 'F1',
+                                  'TP', 'FP', 'TN', 'FN', 'Err'][:len(display_df.columns)]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
+            # график
             chart_df = metrics_df[['iteration', 'accuracy', 'balanced_accuracy', 'f1']].copy()
-            chart_df = chart_df.rename(columns={
-                'iteration': 'Итерация', 'accuracy': 'Accuracy',
-                'balanced_accuracy': 'Bal.Accuracy', 'f1': 'F1'
-            })
-            chart_df = chart_df.set_index('Итерация')
-            chart_df['F1'] = chart_df['F1'] * 100
+            chart_df.columns = ['iter', 'accuracy', 'bal_accuracy', 'f1']
+            chart_df = chart_df.set_index('iter')
+            chart_df['f1'] = chart_df['f1'] * 100
             st.line_chart(chart_df)
 
+            # confusion matrix
             last = metrics_history[-1]
             st.subheader("Confusion Matrix (последняя итерация)")
             cm_df = pd.DataFrame(
@@ -385,82 +331,61 @@ with tab_results:
             )
             st.dataframe(cm_df, use_container_width=True)
 
+            # промпты
             st.divider()
             st.subheader("Промпты по итерациям")
             for m in metrics_history:
                 snap = m.get("prompt_snapshot", "")
                 if snap:
-                    with st.expander(
-                        f"Итерация {m['iteration']} — "
-                        f"Acc: {m['accuracy']}% | BAcc: {m['balanced_accuracy']}%"
-                    ):
+                    with st.expander(f"iter {m['iteration']} — acc:{m['accuracy']}% bacc:{m['balanced_accuracy']}%"):
                         st.code(snap, language="markdown")
 
         st.divider()
         st.subheader("Лучший промпт")
         st.code(fs['best_prompt'], language="markdown")
 
-        # Export
+        # экспорт
         st.divider()
         st.subheader("Экспорт")
         dl1, dl2, dl3 = st.columns(3)
         with dl1:
-            st.download_button("Лучший промпт (.txt)", data=fs['best_prompt'],
-                               file_name="best_prompt.txt", mime="text/plain",
-                               use_container_width=True)
+            st.download_button("Промпт (.txt)", data=fs['best_prompt'],
+                               file_name="best_prompt.txt", mime="text/plain", use_container_width=True)
         with dl2:
             if metrics_history:
-                csv_data = pd.DataFrame(metrics_history).to_csv(index=False)
-                st.download_button("Метрики (.csv)", data=csv_data,
-                                   file_name="metrics_history.csv", mime="text/csv",
-                                   use_container_width=True)
+                st.download_button("Метрики (.csv)", data=pd.DataFrame(metrics_history).to_csv(index=False),
+                                   file_name="metrics.csv", mime="text/csv", use_container_width=True)
         with dl3:
-            report = {
-                "best_prompt": fs['best_prompt'],
-                "best_accuracy": fs['best_accuracy'],
-                "metrics_history": metrics_history,
-                "config": cfg, "timestamp": res["timestamp"]
-            }
-            st.download_button("Полный отчёт (.json)",
-                               data=json.dumps(report, ensure_ascii=False, indent=2),
-                               file_name="report.json", mime="application/json",
-                               use_container_width=True)
+            report = {"best_prompt": fs['best_prompt'], "best_accuracy": fs['best_accuracy'],
+                      "metrics_history": metrics_history, "config": cfg, "timestamp": res["timestamp"]}
+            st.download_button("Отчёт (.json)", data=json.dumps(report, ensure_ascii=False, indent=2),
+                               file_name="report.json", mime="application/json", use_container_width=True)
 
         with open("best_prompt.txt", "w", encoding="utf-8") as f:
             f.write(fs['best_prompt'])
 
-# ────────────────────────────────────────────
-# TAB 5: History
-# ────────────────────────────────────────────
+# история
 with tab_history:
     st.subheader("История запусков")
 
     if not st.session_state.run_history:
-        st.info("История пуста. Запустите пайплайн для создания записей.")
+        st.info("История пуста.")
     else:
         for i, run in enumerate(reversed(st.session_state.run_history)):
             fs_h = run["final_state"]
             cfg_h = run["config"]
             ts = run.get("timestamp", "—")
-            with st.expander(
-                f"{ts}  |  Accuracy: {fs_h['best_accuracy']:.1f}%  |  "
-                f"{cfg_h['evaluator']} / {cfg_h['judge']}",
-                expanded=(i == 0)
-            ):
-                hc1, hc2, hc3 = st.columns(3)
-                with hc1:
-                    st.metric("Best Accuracy", f"{fs_h['best_accuracy']:.1f}%")
-                with hc2:
-                    st.metric("Итераций", fs_h.get('iteration', 1) - 1)
-                with hc3:
-                    st.metric("Train / Val", f"{cfg_h['train']} / {cfg_h['val']}")
+            with st.expander(f"{ts} | acc:{fs_h['best_accuracy']:.1f}% | {cfg_h['evaluator']}/{cfg_h['judge']}", expanded=(i == 0)):
+                c1, c2, c3 = st.columns(3)
+                with c1: st.metric("Best Accuracy", f"{fs_h['best_accuracy']:.1f}%")
+                with c2: st.metric("Итераций", fs_h.get('iteration', 1) - 1)
+                with c3: st.metric("Train/Val", f"{cfg_h['train']}/{cfg_h['val']}")
 
                 hist_metrics = fs_h.get('metrics_history', [])
                 if hist_metrics:
-                    st.dataframe(pd.DataFrame(hist_metrics),
-                                 use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(hist_metrics), use_container_width=True, hide_index=True)
 
                 run_logs = run.get("logs", [])
                 if run_logs:
-                    with st.expander("Логи выполнения"):
+                    with st.expander("Логи"):
                         st.code("\n".join(run_logs), language="log")

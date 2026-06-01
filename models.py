@@ -1,6 +1,6 @@
 from pydantic import BaseModel
-from typing import List, TypedDict, Literal, Optional
-from dataclasses import dataclass, field
+from typing import List, TypedDict, Literal
+from dataclasses import dataclass
 
 
 class UniversalExample(BaseModel):
@@ -8,10 +8,12 @@ class UniversalExample(BaseModel):
     expected_label: str
     explanation: str
 
+
 class JudgeResponse(BaseModel):
-    analysis: str  
+    analysis: str
     evidence: str
     label: Literal["0", "1"]
+
 
 class GraphState(TypedDict):
     task_description: str
@@ -29,7 +31,7 @@ class GraphState(TypedDict):
 
 @dataclass
 class RunConfig:
-    """Centralized config for a pipeline run."""
+    """централизованный конфиг запуска."""
     api_token: str = ""
     api_base_url: str = "https://api.openai.com/v1"
     evaluator_model: str = "gemini-3-flash-preview"
