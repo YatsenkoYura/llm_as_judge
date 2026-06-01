@@ -109,7 +109,7 @@ with tab_data:
             with c3: st.metric("Файл", uploaded_file.name)
 
             with st.expander("Превью", expanded=True):
-                st.dataframe(df.head(5), width="stretch")
+                st.dataframe(df.head(5).astype(str), width="stretch")
 
             st.divider()
             st.subheader("Маппинг столбцов")
