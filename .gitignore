@@ -4,3 +4,4 @@ __pycache__
 best_prompt.txt
 *.pyc
 .idea
+dataset-for-you/

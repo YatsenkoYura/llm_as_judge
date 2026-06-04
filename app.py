@@ -30,6 +30,35 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
+
+def render_confusion_matrix(tn, fp, fn, tp):
+    # Кастомная CSS-визуализация Confusion Matrix
+    st.markdown(f"""
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 15px 0;">
+        <div style="background: rgba(38, 166, 154, 0.12); border: 1px solid rgba(38, 166, 154, 0.3); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: 500; color: #80cbc4;">True Negatives (TN)</div>
+            <div style="font-size: 1.8rem; font-weight: 700; color: #26a69a; margin: 4px 0;">{tn}</div>
+            <div style="font-size: 0.75rem; color: #b2dfdb;">Факт: 0 | Судья: 0</div>
+        </div>
+        <div style="background: rgba(239, 83, 80, 0.12); border: 1px solid rgba(239, 83, 80, 0.3); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: 500; color: #ef9a9a;">False Positives (FP)</div>
+            <div style="font-size: 1.8rem; font-weight: 700; color: #ef5350; margin: 4px 0;">{fp}</div>
+            <div style="font-size: 0.75rem; color: #ffcdd2;">Факт: 0 | Судья: 1 (Ложная тревога)</div>
+        </div>
+        <div style="background: rgba(255, 167, 38, 0.12); border: 1px solid rgba(255, 167, 38, 0.3); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: 500; color: #ffcc80;">False Negatives (FN)</div>
+            <div style="font-size: 1.8rem; font-weight: 700; color: #ffa726; margin: 4px 0;">{fn}</div>
+            <div style="font-size: 0.75rem; color: #ffe0b2;">Факт: 1 | Судья: 0 (Пропуск нарушения)</div>
+        </div>
+        <div style="background: rgba(38, 166, 154, 0.12); border: 1px solid rgba(38, 166, 154, 0.3); border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="font-size: 0.85rem; font-weight: 500; color: #80cbc4;">True Positives (TP)</div>
+            <div style="font-size: 1.8rem; font-weight: 700; color: #26a69a; margin: 4px 0;">{tp}</div>
+            <div style="font-size: 0.75rem; color: #b2dfdb;">Факт: 1 | Судья: 1</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 # состояния
 if "run_history" not in st.session_state:
     st.session_state.run_history = []
@@ -365,12 +394,15 @@ with tab_run:
                 with bc3: st.metric("F1", f"{f1:.3f}")
                 with bc4: st.metric("API Err", api_errors)
 
-                cm_df = pd.DataFrame(
-                    [[tn, fp], [fn, tp]],
-                    index=['Факт: 0', 'Факт: 1'],
-                    columns=['Предсказано: 0', 'Предсказано: 1']
-                )
-                st.dataframe(cm_df, width="stretch")
+                render_confusion_matrix(tn, fp, fn, tp)
+                
+                with st.expander("Показать в табличном виде"):
+                    cm_df = pd.DataFrame(
+                        [[tn, fp], [fn, tp]],
+                        index=['Факт: 0', 'Факт: 1'],
+                        columns=['Предсказано: 0', 'Предсказано: 1']
+                    )
+                    st.dataframe(cm_df, width="stretch")
 
                 # сравнение если есть результат пайплайна
                 if st.session_state.last_result:
@@ -428,12 +460,15 @@ with tab_results:
             # confusion matrix
             last = metrics_history[-1]
             st.subheader("Confusion Matrix (последняя итерация)")
-            cm_df = pd.DataFrame(
-                [[last['tn'], last['fp']], [last['fn'], last['tp']]],
-                index=['Факт: 0', 'Факт: 1'],
-                columns=['Предсказано: 0', 'Предсказано: 1']
-            )
-            st.dataframe(cm_df, width="stretch")
+            render_confusion_matrix(last['tn'], last['fp'], last['fn'], last['tp'])
+            
+            with st.expander("Показать в табличном виде"):
+                cm_df = pd.DataFrame(
+                    [[last['tn'], last['fp']], [last['fn'], last['tp']]],
+                    index=['Факт: 0', 'Факт: 1'],
+                    columns=['Предсказано: 0', 'Предсказано: 1']
+                )
+                st.dataframe(cm_df, width="stretch")
 
             # промпты
             st.divider()

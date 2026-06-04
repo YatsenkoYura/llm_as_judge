@@ -103,12 +103,16 @@ def build_workflow(
         {state['current_prompt']}
         ---
 
-        Ошибки на валидации:
+        Анализ ошибок прошлого цикла (Confusion Matrix & Примеры):
         {state['feedback']}
 
-        Задача: улучши предыдущую инструкцию, добавив правила для исправления ошибок.
-        Сохрани основной каркас — он уже работает на многих примерах.
-        Выведи только текст новой инструкции.
+        Задача:
+        1. Внимательно изучи матрицу ошибок (Confusion Matrix) и рекомендации по исправлению смещения (высокий FP или FN).
+        2. Проанализируй конкретные примеры ошибок, чтобы понять причины ложных срабатываний или пропусков.
+        3. Модифицируй предыдущую инструкцию: добавь уточнения, правила-исключения или сделай требования строже/мягче, чтобы исправить системные отклонения.
+        4. Сохрани общий рабочий каркас инструкции — не переписывай её с нуля, а точечно оптимизируй.
+
+        Выведи только текст новой инструкции без каких-либо объяснений или оберток.
         """
         else:
             system_message += "\nВыведи только текст инструкции."
@@ -134,7 +138,8 @@ def build_workflow(
         _emit({"type": "eval_start", "iteration": iteration, "total": len(state['val_examples'])})
 
         tp = fp = tn = fn = api_errors = 0
-        errors = []
+        false_positives = []
+        false_negatives = []
         total = len(state['val_examples'])
 
         def eval_single(idx, example):
@@ -173,10 +178,16 @@ def build_workflow(
                 logger.info(f"exp={example.expected_label} pred={result.label} {'ok' if is_correct else 'miss'}")
 
                 if not is_correct:
-                    errors.append(
+                    error_detail = (
                         f"Ожидали: {example.expected_label}, Получили: {result.label}\n"
-                        f"Анализ: {result.analysis}\nДоказательства: {result.evidence}"
+                        f"Контекст:\n{example.context}\n"
+                        f"Анализ судьи: {result.analysis}\n"
+                        f"Доказательства: {result.evidence}\n"
                     )
+                    if expected == 0 and predicted == 1:
+                        false_positives.append(error_detail)
+                    elif expected == 1 and predicted == 0:
+                        false_negatives.append(error_detail)
 
                 _emit({"type": "eval_progress", "iteration": iteration,
                        "current": completed, "total": total, "status": "ok",
@@ -206,12 +217,45 @@ def build_workflow(
                      f"prec={precision:.3f} rec={recall:.3f} f1={f1:.3f} "
                      f"tp={tp} fp={fp} tn={tn} fn={fn} errors={api_errors}")
 
-        error_stats = (
-            f"FP (ожидали 0, получили 1): {fp}, FN (ожидали 1, получили 0): {fn}\n"
-            f"Balanced Accuracy: {balanced_accuracy:.1f}% | F1: {f1:.3f}\n"
-        )
-        error_examples = "\n\n".join(errors[:3]) if errors else ""
-        feedback = error_stats + "\nПримеры ошибок:\n" + error_examples if error_examples else error_stats
+        # Формируем структурированный фидбек с матрицей ошибок и анализом смещения (bias)
+        feedback_lines = [
+            "### Статистика ошибок (Confusion Matrix) предыдущего цикла:",
+            f"- True Negatives (TN) [Корректно определен класс 0]: {tn}",
+            f"- False Positives (FP) [Ожидали 0, ошибочно поставили 1]: {fp}",
+            f"- False Negatives (FN) [Ожидали 1, ошибочно поставили 0]: {fn}",
+            f"- True Positives (TP) [Корректно определен класс 1]: {tp}",
+            f"\nМетрики: Balanced Accuracy = {balanced_accuracy:.1f}%, F1 = {f1:.3f}"
+        ]
+
+        # Добавляем совет по оптимизации (системный анализ смещения)
+        if fp > fn:
+            feedback_lines.append(
+                "\n**Рекомендация по улучшению:** У судьи наблюдается высокая доля Ложно-Положительных (FP) ошибок. "
+                "Это значит, что критерии оценки слишком строгие или параноидальные. "
+                "Ослабь ограничения, добавь больше исключений/граничных случаев, когда ответ считается допустимым (класс 0)."
+            )
+        elif fn > fp:
+            feedback_lines.append(
+                "\n**Рекомендация по улучшению:** У судьи наблюдается высокая доля Ложно-Отрицательных (FN) ошибок. "
+                "Это значит, что критерии слишком мягкие и судья пропускает нарушения. "
+                "Сделай правила более строгими, четко пропиши запреты и критерии отнесения к классу 1."
+            )
+        else:
+            feedback_lines.append(
+                "\n**Рекомендация по улучшению:** Ошибки распределены сбалансированно. Постарайся повысить общую точность инструкции."
+            )
+
+        if false_positives:
+            feedback_lines.append("\n#### Примеры Ложно-Положительных ошибок (FP - ожидали 0, получили 1):")
+            for idx, err in enumerate(false_positives[:2]):
+                feedback_lines.append(f"Пример {idx+1}:\n{err}")
+
+        if false_negatives:
+            feedback_lines.append("\n#### Примеры Ложно-Отрицательных ошибок (FN - ожидали 1, получили 0):")
+            for idx, err in enumerate(false_negatives[:2]):
+                feedback_lines.append(f"Пример {idx+1}:\n{err}")
+
+        feedback = "\n".join(feedback_lines)
 
         iteration_metrics = {
             "iteration": iteration,
